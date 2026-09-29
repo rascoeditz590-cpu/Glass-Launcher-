@@ -1,9 +1,14 @@
 package com.glass.launcher
 
+import android.app.WallpaperManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Shader
 import android.os.Bundle
-import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -29,9 +34,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,12 +50,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -62,6 +72,26 @@ import java.util.Date
 import java.util.Locale
 
 data class AppItem(val label: String, val pkg: String, val icon: ImageBitmap)
+data class WallpaperItem(val name: String, val colors: List<Color>)
+data class ControlStyle(val name: String, val bg: Brush, val btn: Color, val text: Color)
+
+val WALLPAPERS = listOf(
+    WallpaperItem("Aurora Blue", listOf(Color(0xFF5B8DFF), Color(0xFF8B6BFF))),
+    WallpaperItem("Crystal Night", listOf(Color(0xFF1C1C3A), Color(0xFF5B8DFF))),
+    WallpaperItem("Emerald Glass", listOf(Color(0xFF0F4C2E), Color(0xFF4C9A5B))),
+    WallpaperItem("Sunset Glow", listOf(Color(0xFFFF9A3C), Color(0xFFFF3C6A))),
+    WallpaperItem("Deep Amoled", listOf(Color(0xFF000000), Color(0xFF1A1A2E))),
+    WallpaperItem("Mint Fog", listOf(Color(0xFF33E0C0), Color(0xFF5B8DFF))),
+    WallpaperItem("Rose Dust", listOf(Color(0xFFFF9EC4), Color(0xFF8B6BFF))),
+    WallpaperItem("Carbon Red", listOf(Color(0xFF1A0000), Color(0xFF8A0000)))
+)
+
+val CONTROL_STYLES = listOf(
+    ControlStyle("Glass UI", Brush.verticalGradient(listOf(Color.White.copy(0.14f), Color.White.copy(0.05f))), Color.White.copy(0.14f), Color.White),
+    ControlStyle("Flat", Brush.verticalGradient(listOf(Color(0xFF2B2F3F), Color(0xFF1C1F2B))), Color(0xFF2B2F3F), Color.White),
+    ControlStyle("Neon", Brush.verticalGradient(listOf(Color(0xFF1A0033), Color(0xFF00081A))), Color(0x33B300FF), Color.White),
+    ControlStyle("Minimal", Brush.verticalGradient(listOf(Color(0xFFF0F0F0), Color(0xFFE0E0E0))), Color(0x11000000), Color.Black)
+)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -74,13 +104,7 @@ fun loadApps(ctx: Context): List<AppItem> {
     val pm = ctx.packageManager
     val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
     return pm.queryIntentActivities(intent, 0)
-        .map {
-            AppItem(
-                it.loadLabel(pm).toString(),
-                it.activityInfo.packageName,
-                it.loadIcon(pm).toBitmap(128, 128).asImageBitmap()
-            )
-        }
+        .map { AppItem(it.loadLabel(pm).toString(), it.activityInfo.packageName, it.loadIcon(pm).toBitmap(128, 128).asImageBitmap()) }
         .filter { it.pkg != ctx.packageName }
         .sortedBy { it.label.lowercase() }
 }
@@ -93,59 +117,46 @@ fun openSettings(ctx: Context, action: String) {
     ctx.startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }
 
+fun applyWallpaper(ctx: Context, colors: List<Color>) {
+    val width = ctx.resources.displayMetrics.widthPixels
+    val height = ctx.resources.displayMetrics.heightPixels
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val paint = Paint()
+    paint.shader = LinearGradient(
+        0f, 0f, width.toFloat(), height.toFloat(),
+        colors.map { it.toArgb() }.toIntArray(),
+        null, Shader.TileMode.CLAMP
+    )
+    canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+    WallpaperManager.getInstance(ctx).setBitmap(bitmap)
+}
+
 fun Modifier.glass(radius: Dp = 24.dp): Modifier {
     val shape = RoundedCornerShape(radius)
-    return this
-        .clip(shape)
-        .background(
-            Brush.verticalGradient(
-                listOf(Color.White.copy(alpha = 0.30f), Color.White.copy(alpha = 0.12f))
-            )
-        )
+    return this.clip(shape)
+        .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.30f), Color.White.copy(alpha = 0.12f))))
         .border(1.dp, Color.White.copy(alpha = 0.35f), shape)
 }
 
 @Composable
 fun AppIcon(app: AppItem, showLabel: Boolean = true) {
     val ctx = LocalContext.current
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .clickable { openApp(ctx, app.pkg) }
-            .padding(6.dp)
-    ) {
-        Image(
-            bitmap = app.icon,
-            contentDescription = app.label,
-            modifier = Modifier.size(56.dp).clip(RoundedCornerShape(15.dp))
-        )
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { openApp(ctx, app.pkg) }.padding(6.dp)) {
+        Image(bitmap = app.icon, contentDescription = app.label, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(15.dp)))
         if (showLabel) {
-            Text(
-                app.label,
-                color = Color.White,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 4.dp)
-            )
+            Text(app.label, color = Color.White, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
         }
     }
 }
 
 @Composable
-fun Tile(emoji: String, label: String, action: String) {
+fun Tile(emoji: String, label: String, action: String, btnColor: Color, textColor: Color) {
     val ctx = LocalContext.current
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-        modifier = Modifier
-            .size(76.dp)
-            .glass(22.dp)
-            .clickable { openSettings(ctx, action) }
-    ) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+        modifier = Modifier.size(76.dp).clip(RoundedCornerShape(22.dp)).background(btnColor).clickable { openSettings(ctx, action) }) {
         Text(emoji, fontSize = 24.sp)
-        Text(label, color = Color.White, fontSize = 11.sp)
+        Text(label, color = textColor, fontSize = 11.sp)
     }
 }
 
@@ -155,6 +166,9 @@ fun LauncherScreen() {
     val apps = remember { loadApps(ctx) }
     var drawer by remember { mutableStateOf(false) }
     var control by remember { mutableStateOf(false) }
+    var themeSheet by remember { mutableStateOf(false) }
+    var themeTab by remember { mutableStateOf(0) }
+    var selectedControl by remember { mutableStateOf(CONTROL_STYLES[0]) }
     var time by remember { mutableStateOf("") }
     var date by remember { mutableStateOf("") }
 
@@ -167,109 +181,107 @@ fun LauncherScreen() {
         }
     }
 
-    BackHandler(enabled = drawer || control) {
-        drawer = false
-        control = false
+    BackHandler(enabled = drawer || control || themeSheet) {
+        drawer = false; control = false; themeSheet = false
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .pointerInput(Unit) {
-                var total = 0f
-                detectVerticalDragGestures(
-                    onDragStart = { total = 0f },
-                    onDragEnd = {
-                        if (total < -120f) {
-                            if (control) control = false else drawer = true
-                        } else if (total > 120f) {
-                            if (drawer) drawer = false else control = true
-                        }
-                    },
-                    onDragCancel = {},
-                    onVerticalDrag = { _, delta -> total += delta }
-                )
+    Box(modifier = Modifier.fillMaxSize().pointerInputSwipe(
+        onUp = { if (control) control = false else drawer = true },
+        onDown = { if (drawer) drawer = false else control = true }
+    )) {
+
+        Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Row(modifier = Modifier.fillMaxWidth().padding(top = 50.dp), horizontalArrangement = Arrangement.End) {
+                Box(modifier = Modifier.size(38.dp).glass(14.dp).clickable { themeSheet = true }, contentAlignment = Alignment.Center) {
+                    Text("\u2728", fontSize = 16.sp)
+                }
             }
-    ) {
-        // HOME
-        Column(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                time,
-                color = Color.White,
-                fontSize = 72.sp,
-                fontWeight = FontWeight.Light,
-                modifier = Modifier.padding(top = 60.dp)
-            )
+            Text(time, color = Color.White, fontSize = 72.sp, fontWeight = FontWeight.Light, modifier = Modifier.padding(top = 10.dp))
             Text(date, color = Color.White.copy(alpha = 0.85f), fontSize = 16.sp)
-
             Box(modifier = Modifier.weight(1f))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .glass(30.dp)
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
+            Row(modifier = Modifier.fillMaxWidth().glass(30.dp).padding(12.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
                 apps.take(4).forEach { AppIcon(it, showLabel = false) }
             }
-            Text(
-                "Upar swipe: Apps  |  Neeche swipe: Control Centre",
-                color = Color.White.copy(alpha = 0.6f),
-                fontSize = 11.sp,
-                modifier = Modifier.padding(top = 10.dp)
-            )
+            Text("Upar: Apps | Neeche: Control | ✨: Themes", color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp, modifier = Modifier.padding(top = 10.dp))
         }
 
-        // APP DRAWER (swipe up)
-        AnimatedVisibility(
-            visible = drawer,
-            enter = slideInVertically(animationSpec = tween(400)) { it / 2 } +
-                fadeIn(tween(400)) + scaleIn(tween(400), initialScale = 0.92f),
-            exit = slideOutVertically(animationSpec = tween(300)) { it / 2 } +
-                fadeOut(tween(300)) + scaleOut(tween(300), targetScale = 0.92f)
-        ) {
+        AnimatedVisibility(visible = drawer,
+            enter = slideInVertically(tween(400)) { it / 2 } + fadeIn(tween(400)) + scaleIn(tween(400), 0.92f),
+            exit = slideOutVertically(tween(300)) { it / 2 } + fadeOut(tween(300)) + scaleOut(tween(300), 0.92f)) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f))) {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(4),
-                    contentPadding = PaddingValues(16.dp, 60.dp, 16.dp, 24.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
+                LazyVerticalGrid(columns = GridCells.Fixed(4), contentPadding = PaddingValues(16.dp, 60.dp, 16.dp, 24.dp), modifier = Modifier.fillMaxSize()) {
                     items(apps) { AppIcon(it) }
                 }
             }
         }
 
-        // CONTROL CENTRE (swipe down)
-        AnimatedVisibility(
-            visible = control,
-            enter = slideInVertically(animationSpec = tween(400)) { -it } + fadeIn(tween(400)),
-            exit = slideOutVertically(animationSpec = tween(300)) { -it } + fadeOut(tween(300))
-        ) {
+        AnimatedVisibility(visible = control,
+            enter = slideInVertically(tween(400)) { -it } + fadeIn(tween(400)),
+            exit = slideOutVertically(tween(300)) { -it } + fadeOut(tween(300))) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f))) {
-                Column(
-                    modifier = Modifier
-                        .padding(20.dp, 56.dp, 20.dp, 20.dp)
-                        .fillMaxWidth()
-                        .glass(32.dp)
-                        .padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    Text("Control Centre", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Medium)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Tile("📶", "Wi-Fi", Settings.ACTION_WIFI_SETTINGS)
-                        Tile("🔵", "Bluetooth", Settings.ACTION_BLUETOOTH_SETTINGS)
-                        Tile("☀️", "Display", Settings.ACTION_DISPLAY_SETTINGS)
-                        Tile("🔊", "Sound", Settings.ACTION_SOUND_SETTINGS)
+                Column(modifier = Modifier.padding(20.dp, 56.dp, 20.dp, 20.dp).fillMaxWidth().clip(RoundedCornerShape(32.dp)).background(selectedControl.bg).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text("Control Centre", color = selectedControl.text, fontSize = 18.sp, fontWeight = FontWeight.Medium)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Tile("\uD83D\uDCF6", "Wi-Fi", android.provider.Settings.ACTION_WIFI_SETTINGS, selectedControl.btn, selectedControl.text)
+                        Tile("\uD83D\uDD35", "Bluetooth", android.provider.Settings.ACTION_BLUETOOTH_SETTINGS, selectedControl.btn, selectedControl.text)
+                        Tile("\u2600\uFE0F", "Display", android.provider.Settings.ACTION_DISPLAY_SETTINGS, selectedControl.btn, selectedControl.text)
+                        Tile("\uD83D\uDD0A", "Sound", android.provider.Settings.ACTION_SOUND_SETTINGS, selectedControl.btn, selectedControl.text)
+                    }
+                }
+            }
+        }
+
+        AnimatedVisibility(visible = themeSheet,
+            enter = slideInVertically(tween(400)) { it } + fadeIn(tween(400)),
+            exit = slideOutVertically(tween(300)) { it } + fadeOut(tween(300))) {
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)).clickable(enabled = false) {}) {
+                Column(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().glass(28.dp).padding(20.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Themes", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Medium)
+                        Text("Band karein", color = Color.White.copy(0.6f), fontSize = 13.sp, modifier = Modifier.clickable { themeSheet = false })
+                    }
+                    Row(modifier = Modifier.padding(top = 14.dp, bottom = 10.dp)) {
+                        listOf("Wallpapers", "Control").forEachIndexed { i, label ->
+                            Text(label, color = if (themeTab == i) Color.White else Color.White.copy(0.5f), fontSize = 14.sp, fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(end = 20.dp).clickable { themeTab = i })
+                        }
+                    }
+                    if (themeTab == 0) {
+                        LazyVerticalGrid(columns = GridCells.Fixed(2), modifier = Modifier.size(0.dp)) {}
+                        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(columns = GridCells.Fixed(2), modifier = Modifier.height(260.dp)) {
+                            items(WALLPAPERS) { w ->
+                                Column(modifier = Modifier.padding(6.dp).clickable { applyWallpaper(ctx, w.colors); themeSheet = false }) {
+                                    Box(modifier = Modifier.fillMaxWidth().size(120.dp).clip(RoundedCornerShape(16.dp)).background(Brush.verticalGradient(w.colors)))
+                                    Text(w.name, color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                                }
+                            }
+                        }
+                    } else {
+                        LazyRow {
+                            items(CONTROL_STYLES) { style ->
+                                Column(modifier = Modifier.padding(6.dp).clickable { selectedControl = style }) {
+                                    Box(modifier = Modifier.size(90.dp).clip(RoundedCornerShape(18.dp)).background(style.bg).border(if (selectedControl.name == style.name) 2.dp else 0.dp, Color.White, RoundedCornerShape(18.dp)))
+                                    Text(style.name, color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
     }
 }
+
+fun Modifier.pointerInputSwipe(onUp: () -> Unit, onDown: () -> Unit): Modifier = this.then(
+    Modifier.then(
+        androidx.compose.ui.input.pointer.pointerInput(Unit) {
+            var total = 0f
+            detectVerticalDragGestures(
+                onDragStart = { total = 0f },
+                onDragEnd = { if (total < -120f) onUp() else if (total > 120f) onDown() },
+                onDragCancel = {},
+                onVerticalDrag = { _, delta -> total += delta }
+            )
+        }
+    )
+)

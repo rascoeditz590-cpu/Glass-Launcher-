@@ -13,6 +13,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,11 +34,17 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -75,31 +82,185 @@ class MainActivity : ComponentActivity() {
 // ---------- Data ----------
 
 data class AppItem(val label: String, val packageName: String, val icon: ImageBitmap)
-data class Wall(val name: String, val colors: List<Color>)
-data class GlassTheme(val name: String, val emoji: String, val accent: Color, val wall: Int)
+data class WallSpec(val name: String, val style: Int, val hue: Float, val dark: Boolean)
+data class GlassTheme(val name: String, val emoji: String, val accent: Color, val wall: Int, val card: Int)
+data class GlassColors(val fill: Color, val border: Color)
+class Pal(val bg: Color, val mid: Color, val glow: Color, val rim: Color)
 
 val Ink = Color(0xFF0F1B33)
 val InkSoft = Color(0xFF5B6B86)
+val InkFixed = Color(0xFF0E1A32)
 
-val wallpapers = listOf(
-    Wall("Sky", listOf(Color(0xFFE9F3FF), Color(0xFFCFE2FF), Color(0xFFB9D0FF))),
-    Wall("Aurora", listOf(Color(0xFFE6FAF3), Color(0xFFCDEFF4), Color(0xFFD6D4FF))),
-    Wall("Blossom", listOf(Color(0xFFFFF1F6), Color(0xFFFFD8E8), Color(0xFFE4D8FF))),
-    Wall("Ocean", listOf(Color(0xFFE3F6FF), Color(0xFFBFE6F5), Color(0xFF9FD0F0))),
-    Wall("Sunset", listOf(Color(0xFFFFF1E0), Color(0xFFFFD3B5), Color(0xFFFFB8C8))),
-    Wall("Minimal", listOf(Color(0xFFFAFAFB), Color(0xFFEEF0F4), Color(0xFFE0E4EB))),
-    Wall("Lavender", listOf(Color(0xFFF1EBFF), Color(0xFFDCD0FF), Color(0xFFC6D4FF))),
-    Wall("Sand", listOf(Color(0xFFFFF8EC), Color(0xFFF6E7CF), Color(0xFFEBD5B8)))
-)
+val LocalInk = compositionLocalOf { Color(0xFF0F1B33) }
+val LocalInkSoft = compositionLocalOf { Color(0xFF5B6B86) }
+val LocalGlass = compositionLocalOf {
+    GlassColors(Color.White.copy(alpha = 0.60f), Color.White.copy(alpha = 0.95f))
+}
 
-val themes = listOf(
-    GlassTheme("Glass Blue", "💠", Color(0xFF2F6BFF), 0),
-    GlassTheme("Aurora", "🌌", Color(0xFF14A38B), 1),
-    GlassTheme("Blossom", "🌸", Color(0xFFE0457B), 2),
-    GlassTheme("Ocean", "🌊", Color(0xFF0A8FD0), 3),
-    GlassTheme("Sunset", "🌇", Color(0xFFF26B3A), 4),
-    GlassTheme("Minimal", "⚪", Color(0xFF1F2937), 5)
-)
+fun hsvColor(h: Float, s: Float, v: Float): Color {
+    val hh = ((h % 360f) + 360f) % 360f
+    return Color(android.graphics.Color.HSVToColor(floatArrayOf(hh, s.coerceIn(0f, 1f), v.coerceIn(0f, 1f))))
+}
+
+val wallStyleNames = listOf("Orb", "Lens", "Waves", "Aura", "Eclipse")
+
+val allWalls: List<WallSpec> = List(100) { n ->
+    val style = n % 5
+    val p = n / 5
+    WallSpec("${wallStyleNames[style]} ${p + 1}", style, (p * 18f + style * 7f) % 360f, p % 2 == 0)
+}
+
+val themeAdj = listOf("Midnight", "Frost", "Ember", "Ocean", "Neon", "Velvet", "Coral", "Lunar", "Solar", "Misty")
+val themeNoun = listOf("Glass", "Bloom", "Pulse", "Drift", "Aura", "Echo", "Prism", "Haze", "Wave", "Glow")
+val themeEmoji = listOf("💠", "🌸", "💓", "🌫️", "✨", "🔔", "🔷", "☁️", "🌊", "🌟")
+
+val themes: List<GlassTheme> = List(100) { i ->
+    val wIdx = (i * 7) % 100
+    val sp = allWalls[wIdx]
+    GlassTheme(
+        "${themeAdj[i % 10]} ${themeNoun[(i / 10) % 10]}",
+        themeEmoji[(i / 10) % 10],
+        hsvColor(sp.hue + 20f, 0.75f, if (sp.dark) 1f else 0.8f),
+        wIdx,
+        i % 3
+    )
+}
+
+fun palette(spec: WallSpec): Pal {
+    val h = spec.hue
+    return if (spec.dark) Pal(
+        hsvColor(h, 0.90f, 0.07f), hsvColor(h, 0.85f, 0.50f),
+        hsvColor(h + 25f, 0.55f, 1f), hsvColor(h + 40f, 0.25f, 1f)
+    ) else Pal(
+        hsvColor(h, 0.08f, 0.98f), hsvColor(h, 0.30f, 0.92f),
+        hsvColor(h + 25f, 0.55f, 0.85f), Color.White
+    )
+}
+
+fun DrawScope.drawWall(spec: WallSpec) {
+    val w = size.width
+    val h = size.height
+    val p = palette(spec)
+    val hue = spec.hue
+    val dark = spec.dark
+    when (spec.style) {
+        0 -> { // Orb
+            drawRect(Brush.verticalGradient(listOf(p.mid, p.bg, p.bg)))
+            val c = Offset(w / 2f, h * 0.5f)
+            val r = w * 0.46f
+            val inner = if (dark) p.bg else hsvColor(hue, 0.35f, 0.75f)
+            drawCircle(
+                brush = Brush.radialGradient(
+                    0f to inner, 0.55f to inner, 0.9f to p.mid, 1f to p.glow,
+                    center = c, radius = r
+                ),
+                radius = r, center = c
+            )
+            drawCircle(color = p.rim.copy(alpha = 0.7f), radius = r, center = c, style = Stroke(w * 0.005f))
+            drawOval(
+                brush = Brush.verticalGradient(
+                    listOf(p.glow, Color.Transparent),
+                    startY = c.y - r * 0.7f, endY = c.y - r * 0.15f
+                ),
+                topLeft = Offset(c.x - r * 0.78f, c.y - r * 0.7f),
+                size = Size(r * 1.56f, r * 0.55f)
+            )
+            drawArc(
+                color = p.glow, startAngle = 30f, sweepAngle = 120f, useCenter = false,
+                topLeft = Offset(c.x - r * 1.12f, c.y - r * 1.05f),
+                size = Size(r * 2.24f, r * 2.24f), style = Stroke(w * 0.008f)
+            )
+        }
+        1 -> { // Lens
+            drawRect(Brush.linearGradient(listOf(p.mid, p.bg)))
+            val a = Offset(-w * 0.05f, h * 0.55f)
+            val ra = w * 0.75f
+            val b = Offset(w * 1.0f, h * 0.40f)
+            val rb = w * 0.70f
+            drawCircle(
+                brush = Brush.radialGradient(0f to p.bg, 0.6f to p.mid, 1f to p.glow, center = a, radius = ra),
+                radius = ra, center = a
+            )
+            drawCircle(
+                brush = Brush.radialGradient(
+                    0f to p.glow.copy(alpha = 0.9f), 0.7f to p.mid.copy(alpha = 0.8f), 1f to p.bg,
+                    center = b, radius = rb
+                ),
+                radius = rb, center = b
+            )
+            val c = Offset(w * 0.72f, h * 0.50f)
+            drawCircle(color = p.rim.copy(alpha = 0.25f), radius = w * 0.30f, center = c)
+            drawCircle(color = p.rim.copy(alpha = 0.7f), radius = ra, center = a, style = Stroke(w * 0.004f))
+            drawCircle(color = p.rim.copy(alpha = 0.7f), radius = rb, center = b, style = Stroke(w * 0.004f))
+        }
+        2 -> { // Waves
+            drawRect(Brush.verticalGradient(listOf(p.mid, p.bg)))
+            for (i in 0..3) {
+                val y0 = h * (0.30f + 0.17f * i)
+                val path = Path().apply {
+                    moveTo(0f, y0)
+                    cubicTo(w * 0.30f, y0 - h * 0.14f, w * 0.65f, y0 + h * 0.14f, w, y0 - h * 0.04f)
+                    lineTo(w, h)
+                    lineTo(0f, h)
+                    close()
+                }
+                val col = if (dark) hsvColor(hue + i * 14f, 0.80f, 0.25f + 0.18f * i)
+                else hsvColor(hue + i * 14f, 0.40f, 0.95f - 0.08f * i)
+                drawPath(
+                    path = path,
+                    brush = Brush.verticalGradient(
+                        listOf(col.copy(alpha = 0.95f), p.bg.copy(alpha = 0.9f)),
+                        startY = y0 - h * 0.1f, endY = h
+                    )
+                )
+                drawPath(path = path, color = p.rim.copy(alpha = 0.55f), style = Stroke(w * 0.004f))
+            }
+        }
+        3 -> { // Aura
+            drawRect(p.bg)
+            val pts = listOf(Offset(0.2f, 0.15f), Offset(0.9f, 0.35f), Offset(0.25f, 0.7f), Offset(0.85f, 0.9f))
+            pts.forEachIndexed { i, o ->
+                val col = hsvColor(hue + i * 35f, if (dark) 0.80f else 0.45f, 0.95f)
+                val c = Offset(o.x * w, o.y * h)
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        listOf(col.copy(alpha = 0.75f), Color.Transparent),
+                        center = c, radius = w * 0.85f
+                    ),
+                    radius = w * 0.85f, center = c
+                )
+            }
+        }
+        else -> { // Eclipse
+            drawRect(Brush.verticalGradient(listOf(p.mid, p.bg, p.mid)))
+            val cx = w / 2f
+            val ys = listOf(h * 0.36f, h * 0.66f)
+            for (idx in 0..1) {
+                val cy = ys[idx]
+                val rw = w * 0.62f
+                val rh = h * 0.13f
+                val colors = if (idx == 0) listOf(p.bg, p.glow.copy(alpha = 0.85f))
+                else listOf(p.glow.copy(alpha = 0.85f), p.bg)
+                drawOval(
+                    brush = Brush.verticalGradient(colors, startY = cy - rh, endY = cy + rh),
+                    topLeft = Offset(cx - rw, cy - rh),
+                    size = Size(rw * 2f, rh * 2f)
+                )
+                drawOval(
+                    color = p.rim.copy(alpha = 0.8f),
+                    topLeft = Offset(cx - rw, cy - rh),
+                    size = Size(rw * 2f, rh * 2f),
+                    style = Stroke(w * 0.006f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun WallCanvas(spec: WallSpec, modifier: Modifier = Modifier) {
+    Canvas(modifier) { drawWall(spec) }
+}
 
 fun loadApps(context: Context): List<AppItem> {
     val pm = context.packageManager
@@ -139,13 +300,14 @@ fun readBattery(context: Context): Int {
 
 // ---------- Small building blocks ----------
 
-fun Modifier.glass(radius: Dp = 24.dp): Modifier {
+fun Modifier.glass(radius: Dp = 24.dp): Modifier = composed {
     val shape = RoundedCornerShape(radius)
-    return this
+    val g = LocalGlass.current
+    this
         .shadow(6.dp, shape, ambientColor = Color(0x22224488), spotColor = Color(0x33224488))
         .clip(shape)
-        .background(Color.White.copy(alpha = 0.60f))
-        .border(1.dp, Color.White.copy(alpha = 0.95f), shape)
+        .background(g.fill)
+        .border(1.dp, g.border, shape)
 }
 
 @Composable
@@ -158,13 +320,18 @@ fun T(
     align: TextAlign = TextAlign.Start,
     maxLines: Int = Int.MAX_VALUE
 ) {
+    val resolved = when (color) {
+        Ink -> LocalInk.current
+        InkSoft -> LocalInkSoft.current
+        else -> color
+    }
     BasicText(
         text = text,
         modifier = modifier,
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
         style = TextStyle(
-            color = color,
+            color = resolved,
             fontSize = size.sp,
             fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal,
             textAlign = align
@@ -237,7 +404,7 @@ fun LauncherApp() {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("glass", Context.MODE_PRIVATE) }
     var themeIdx by remember { mutableStateOf(prefs.getInt("theme", 0).coerceIn(0, themes.size - 1)) }
-    var wallIdx by remember { mutableStateOf(prefs.getInt("wall", 0).coerceIn(0, wallpapers.size - 1)) }
+    var wallIdx by remember { mutableStateOf(prefs.getInt("wall", 0).coerceIn(0, allWalls.size - 1)) }
     var tab by remember { mutableStateOf(0) }
     var apps by remember { mutableStateOf(emptyList<AppItem>()) }
 
@@ -248,32 +415,54 @@ fun LauncherApp() {
     BackHandler(enabled = tab != 0) { tab = 0 }
 
     val accent by animateColorAsState(themes[themeIdx].accent)
+    val spec = allWalls[wallIdx]
+    val dark = spec.dark
+    val ink = if (dark) Color(0xFFF2F6FF) else Color(0xFF0F1B33)
+    val inkSoft = if (dark) Color(0xFFB4C0D8) else Color(0xFF5B6B86)
+    val glassColors = when (themes[themeIdx].card) {
+        1 -> if (dark) GlassColors(Color(0xFF1B2333).copy(alpha = 0.92f), Color.White.copy(alpha = 0.18f))
+        else GlassColors(Color.White.copy(alpha = 0.92f), Color.White)
+        2 -> GlassColors(accent.copy(alpha = if (dark) 0.22f else 0.16f), accent.copy(alpha = 0.45f))
+        else -> if (dark) GlassColors(Color.White.copy(alpha = 0.12f), Color.White.copy(alpha = 0.28f))
+        else GlassColors(Color.White.copy(alpha = 0.60f), Color.White.copy(alpha = 0.95f))
+    }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Brush.linearGradient(wallpapers[wallIdx].colors))
+    SideEffect {
+        (context as? ComponentActivity)?.let { a ->
+            val c = WindowInsetsControllerCompat(a.window, a.window.decorView)
+            c.isAppearanceLightStatusBars = !dark
+            c.isAppearanceLightNavigationBars = !dark
+        }
+    }
+
+    CompositionLocalProvider(
+        LocalInk provides ink,
+        LocalInkSoft provides inkSoft,
+        LocalGlass provides glassColors
     ) {
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                Crossfade(targetState = tab) { t ->
-                    when (t) {
-                        0 -> HomeTab(apps, accent) { tab = it }
-                        1 -> AppsTab(apps)
-                        2 -> ThemesTab(themeIdx, accent) { i ->
-                            themeIdx = i
-                            wallIdx = themes[i].wall
-                            prefs.edit().putInt("theme", i).putInt("wall", wallIdx).apply()
+        Box(Modifier.fillMaxSize()) {
+            WallCanvas(spec, Modifier.fillMaxSize())
+            Column(Modifier.fillMaxSize().statusBarsPadding()) {
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    Crossfade(targetState = tab) { t ->
+                        when (t) {
+                            0 -> HomeTab(apps, accent) { tab = it }
+                            1 -> AppsTab(apps)
+                            2 -> ThemesTab(themeIdx, accent) { i ->
+                                themeIdx = i
+                                wallIdx = themes[i].wall
+                                prefs.edit().putInt("theme", i).putInt("wall", wallIdx).apply()
+                            }
+                            3 -> WallpapersTab(wallIdx, accent) { i ->
+                                wallIdx = i
+                                prefs.edit().putInt("wall", i).apply()
+                            }
+                            else -> ControlCenterTab(accent)
                         }
-                        3 -> WallpapersTab(wallIdx, accent) { i ->
-                            wallIdx = i
-                            prefs.edit().putInt("wall", i).apply()
-                        }
-                        else -> ControlCenterTab(accent)
                     }
                 }
+                BottomBar(tab, accent) { tab = it }
             }
-            BottomBar(tab, accent) { tab = it }
         }
     }
 }
@@ -338,201 +527,4 @@ fun HomeTab(apps: List<AppItem>, accent: Color, goTab: (Int) -> Unit) {
     val time = SimpleDateFormat("hh:mm", Locale.getDefault()).format(now)
     val date = SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(now)
 
-    Column(Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp)
-        ) {
-            Spacer(Modifier.height(16.dp))
-            Row {
-                T("Glass ", 26, Ink, true)
-                T("Launcher", 26, accent, true)
-            }
-            T("Customize • Personalize • Enjoy", 13, InkSoft)
-            Spacer(Modifier.height(16.dp))
-
-            // Clock + battery widget
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .glass(28.dp)
-                    .padding(20.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    T(greeting, 15, InkSoft)
-                    T(time, 56, Ink, true)
-                    T(date, 14, InkSoft)
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    T("🔋 $battery%", 16, Ink, true)
-                    Spacer(Modifier.height(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .width(90.dp)
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color.White)
-                    ) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth(battery.coerceIn(0, 100) / 100f)
-                                .fillMaxHeight()
-                                .background(accent)
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                FeatureCard("🎨", "Themes", "Stylish themes", accent, Modifier.weight(1f)) { goTab(2) }
-                FeatureCard("🖼️", "Wallpapers", "Clean & bright", accent, Modifier.weight(1f)) { goTab(3) }
-            }
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                FeatureCard("🔲", "All Apps", "${apps.size} apps", accent, Modifier.weight(1f)) { goTab(1) }
-                FeatureCard("🎛️", "Control Center", "Quick settings", accent, Modifier.weight(1f)) {
-                    goTab(4)
-                }
-            }
-
-            Spacer(Modifier.height(20.dp))
-            T("Quick Controls", 16, Ink, true)
-            Spacer(Modifier.height(10.dp))
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ControlTile("📶", "Wi-Fi", Settings.ACTION_WIFI_SETTINGS)
-                ControlTile("🔵", "Bluetooth", Settings.ACTION_BLUETOOTH_SETTINGS)
-                ControlTile("✈️", "Airplane", Settings.ACTION_AIRPLANE_MODE_SETTINGS)
-                ControlTile("📍", "Location", Settings.ACTION_LOCATION_SOURCE_SETTINGS)
-                ControlTile("🔆", "Display", Settings.ACTION_DISPLAY_SETTINGS)
-                ControlTile("🔊", "Sound", Settings.ACTION_SOUND_SETTINGS)
-            }
-            Spacer(Modifier.height(16.dp))
-        }
-
-        // Dock
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .glass(28.dp)
-                .padding(vertical = 14.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            apps.take(5).forEach { app ->
-                Image(
-                    bitmap = app.icon,
-                    contentDescription = app.label,
-                    modifier = Modifier
-                        .size(50.dp)
-                        .clickable { launchApp(context, app.packageName) }
-                )
-            }
-        }
-    }
-}
-
-// ---------- Apps ----------
-
-@Composable
-fun AppsTab(apps: List<AppItem>) {
-    val context = LocalContext.current
-    Column(Modifier.fillMaxSize()) {
-        ScreenHeader("All Apps", "${apps.size} apps installed")
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(4),
-            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            items(apps) { app ->
-                Column(
-                    modifier = Modifier
-                        .padding(4.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable { launchApp(context, app.packageName) }
-                        .padding(vertical = 8.dp, horizontal = 2.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Image(
-                        bitmap = app.icon,
-                        contentDescription = app.label,
-                        modifier = Modifier.size(52.dp)
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    T(app.label, 11, Ink, align = TextAlign.Center, maxLines = 1)
-                }
-            }
-        }
-    }
-}
-
-// ---------- Themes ----------
-
-@Composable
-fun ThemesTab(selected: Int, accent: Color, onPick: (Int) -> Unit) {
-    Column(Modifier.fillMaxSize()) {
-        ScreenHeader("Themes", "Change the look of your phone")
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            items(themes.size) { i ->
-                val t = themes[i]
-                Column(
-                    modifier = Modifier
-                        .glass(22.dp)
-                        .then(
-                            if (i == selected) Modifier.border(2.dp, accent, RoundedCornerShape(22.dp))
-                            else Modifier
-                        )
-                        .clickable { onPick(i) }
-                        .padding(10.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(120.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Brush.linearGradient(wallpapers[t.wall].colors))
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(8.dp)
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(t.accent),
-                            contentAlignment = Alignment.Center
-                        ) { T(t.emoji, 13) }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Row {
-                        T(t.name, 14, Ink, true)
-                        if (i == selected) T("  ✓", 14, t.accent, true)
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ---------- Wallpapers ----------
-
-@Composable
-fun WallpapersTab(selected: Int, accent: Color, onPick: (Int) -> Unit) {
-    Column(Modifier.fillMaxSize()) {
-        ScreenHeader("Wallpapers", "Clean & bright backgrounds")
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement
+ 

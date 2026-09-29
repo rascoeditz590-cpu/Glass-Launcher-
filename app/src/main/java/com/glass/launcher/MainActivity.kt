@@ -415,12 +415,17 @@ fun LauncherApp() {
     val dark = spec.dark
     val ink = if (dark) Color(0xFFF2F6FF) else Color(0xFF0F1B33)
     val inkSoft = if (dark) Color(0xFFB4C0D8) else Color(0xFF5B6B86)
+    
     val glassColors = when (themes[themeIdx].card) {
-        1 -> if (dark) GlassColors(Color(0xFF1B2333).copy(alpha = 0.92f), Color.White.copy(alpha = 0.18f))
-        else GlassColors(Color.White.copy(alpha = 0.92f), Color.White)
+        1 -> {
+            if (dark) GlassColors(Color(0xFF1B2333).copy(alpha = 0.92f), Color.White.copy(alpha = 0.18f))
+            else GlassColors(Color.White.copy(alpha = 0.92f), Color.White)
+        }
         2 -> GlassColors(accent.copy(alpha = if (dark) 0.22f else 0.16f), accent.copy(alpha = 0.45f))
-        else -> if (dark) GlassColors(Color.White.copy(alpha = 0.12f), Color.White.copy(alpha = 0.28f))
-        else GlassColors(Color.White.copy(alpha = 0.60f), Color.White.copy(alpha = 0.95f))
+        else -> {
+            if (dark) GlassColors(Color.White.copy(alpha = 0.12f), Color.White.copy(alpha = 0.28f))
+            else GlassColors(Color.White.copy(alpha = 0.60f), Color.White.copy(alpha = 0.95f))
+        }
     }
 
     SideEffect {
@@ -524,5 +529,4 @@ fun HomeTab(apps: List<AppItem>, accent: Color, goTab: (Int) -> Unit) {
     Column(Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberS
+        

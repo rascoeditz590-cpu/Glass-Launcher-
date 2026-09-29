@@ -144,7 +144,7 @@ fun DrawScope.drawWall(spec: WallSpec) {
     val hue = spec.hue
     val dark = spec.dark
     when (spec.style) {
-        0 -> { // Orb
+        0 -> {
             drawRect(Brush.verticalGradient(listOf(p.mid, p.bg, p.bg)))
             val c = Offset(w / 2f, h * 0.5f)
             val r = w * 0.46f
@@ -171,7 +171,7 @@ fun DrawScope.drawWall(spec: WallSpec) {
                 size = Size(r * 2.24f, r * 2.24f), style = Stroke(w * 0.008f)
             )
         }
-        1 -> { // Lens
+        1 -> {
             drawRect(Brush.linearGradient(listOf(p.mid, p.bg)))
             val a = Offset(-w * 0.05f, h * 0.55f)
             val ra = w * 0.75f
@@ -193,7 +193,7 @@ fun DrawScope.drawWall(spec: WallSpec) {
             drawCircle(color = p.rim.copy(alpha = 0.7f), radius = ra, center = a, style = Stroke(w * 0.004f))
             drawCircle(color = p.rim.copy(alpha = 0.7f), radius = rb, center = b, style = Stroke(w * 0.004f))
         }
-        2 -> { // Waves
+        2 -> {
             drawRect(Brush.verticalGradient(listOf(p.mid, p.bg)))
             for (i in 0..3) {
                 val y0 = h * (0.30f + 0.17f * i)
@@ -216,7 +216,7 @@ fun DrawScope.drawWall(spec: WallSpec) {
                 drawPath(path = path, color = p.rim.copy(alpha = 0.55f), style = Stroke(w * 0.004f))
             }
         }
-        3 -> { // Aura
+        3 -> {
             drawRect(p.bg)
             val pts = listOf(Offset(0.2f, 0.15f), Offset(0.9f, 0.35f), Offset(0.25f, 0.7f), Offset(0.85f, 0.9f))
             pts.forEachIndexed { i, o ->
@@ -231,7 +231,7 @@ fun DrawScope.drawWall(spec: WallSpec) {
                 )
             }
         }
-        else -> { // Eclipse
+        else -> {
             drawRect(Brush.verticalGradient(listOf(p.mid, p.bg, p.mid)))
             val cx = w / 2f
             val ys = listOf(h * 0.36f, h * 0.66f)
@@ -297,8 +297,6 @@ fun readBattery(context: Context): Int {
     val scale = i?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
     return if (level >= 0 && scale > 0) level * 100 / scale else 0
 }
-
-// ---------- Small building blocks ----------
 
 fun Modifier.glass(radius: Dp = 24.dp): Modifier = composed {
     val shape = RoundedCornerShape(radius)
@@ -396,8 +394,6 @@ fun ScreenHeader(title: String, sub: String) {
         T(sub, 14, InkSoft)
     }
 }
-
-// ---------- Root ----------
 
 @Composable
 fun LauncherApp() {
@@ -501,8 +497,6 @@ fun BottomBar(selected: Int, accent: Color, onSelect: (Int) -> Unit) {
     }
 }
 
-// ---------- Home ----------
-
 @Composable
 fun HomeTab(apps: List<AppItem>, accent: Color, goTab: (Int) -> Unit) {
     val context = LocalContext.current
@@ -527,4 +521,8 @@ fun HomeTab(apps: List<AppItem>, accent: Color, goTab: (Int) -> Unit) {
     val time = SimpleDateFormat("hh:mm", Locale.getDefault()).format(now)
     val date = SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(now)
 
- 
+    Column(Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberS

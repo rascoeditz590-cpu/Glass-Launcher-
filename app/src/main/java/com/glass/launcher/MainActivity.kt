@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -50,15 +51,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,18 +71,22 @@ import java.util.Date
 import java.util.Locale
 
 data class AppItem(val label: String, val pkg: String, val icon: ImageBitmap)
-data class WallpaperItem(val name: String, val colors: List<Color>)
+data class WallpaperItem(val name: String, val category: String, val colors: List<Color>)
 data class ControlStyle(val name: String, val bg: Brush, val btn: Color, val text: Color)
 
 val WALLPAPERS = listOf(
-    WallpaperItem("Aurora Blue", listOf(Color(0xFF5B8DFF), Color(0xFF8B6BFF))),
-    WallpaperItem("Crystal Night", listOf(Color(0xFF1C1C3A), Color(0xFF5B8DFF))),
-    WallpaperItem("Emerald Glass", listOf(Color(0xFF0F4C2E), Color(0xFF4C9A5B))),
-    WallpaperItem("Sunset Glow", listOf(Color(0xFFFF9A3C), Color(0xFFFF3C6A))),
-    WallpaperItem("Deep Amoled", listOf(Color(0xFF000000), Color(0xFF1A1A2E))),
-    WallpaperItem("Mint Fog", listOf(Color(0xFF33E0C0), Color(0xFF5B8DFF))),
-    WallpaperItem("Rose Dust", listOf(Color(0xFFFF9EC4), Color(0xFF8B6BFF))),
-    WallpaperItem("Carbon Red", listOf(Color(0xFF1A0000), Color(0xFF8A0000)))
+    WallpaperItem("Aurora Blue", "Abstract", listOf(Color(0xFF5B8DFF), Color(0xFF8B6BFF))),
+    WallpaperItem("Crystal Night", "Abstract", listOf(Color(0xFF1C1C3A), Color(0xFF5B8DFF))),
+    WallpaperItem("Deep Amoled", "Abstract", listOf(Color(0xFF000000), Color(0xFF1A1A2E))),
+    WallpaperItem("Mint Fog", "Abstract", listOf(Color(0xFF33E0C0), Color(0xFF5B8DFF))),
+    WallpaperItem("Forest Mist", "Nature", listOf(Color(0xFF0F4C2E), Color(0xFF4C9A5B))),
+    WallpaperItem("Ocean Breeze", "Nature", listOf(Color(0xFF134E5E), Color(0xFF71B280))),
+    WallpaperItem("Golden Sunset", "Nature", listOf(Color(0xFFFF9A3C), Color(0xFFFF3C6A))),
+    WallpaperItem("Earthy Canyon", "Nature", listOf(Color(0xFF8D5524), Color(0xFFC68642))),
+    WallpaperItem("Sakura Dream", "Anime", listOf(Color(0xFFFF6B81), Color(0xFF5352ED))),
+    WallpaperItem("Neo Tokyo", "Anime", listOf(Color(0xFF341F97), Color(0xFFFF6B6B))),
+    WallpaperItem("Cyber Pink", "Anime", listOf(Color(0xFFFF9FF3), Color(0xFFFECA57))),
+    WallpaperItem("Spirit Glow", "Anime", listOf(Color(0xFF1DD1A1), Color(0xFF341F97)))
 )
 
 val CONTROL_STYLES = listOf(
@@ -160,6 +163,16 @@ fun Tile(emoji: String, label: String, action: String, btnColor: Color, textColo
     }
 }
 
+fun Modifier.swipeUpDown(onUp: () -> Unit, onDown: () -> Unit): Modifier = this.pointerInput(Unit) {
+    var total = 0f
+    detectVerticalDragGestures(
+        onDragStart = { total = 0f },
+        onDragEnd = { if (total < -120f) onUp() else if (total > 120f) onDown() },
+        onDragCancel = {},
+        onVerticalDrag = { _, delta -> total += delta }
+    )
+}
+
 @Composable
 fun LauncherScreen() {
     val ctx = LocalContext.current
@@ -168,6 +181,7 @@ fun LauncherScreen() {
     var control by remember { mutableStateOf(false) }
     var themeSheet by remember { mutableStateOf(false) }
     var themeTab by remember { mutableStateOf(0) }
+    var wallCat by remember { mutableStateOf("Abstract") }
     var selectedControl by remember { mutableStateOf(CONTROL_STYLES[0]) }
     var time by remember { mutableStateOf("") }
     var date by remember { mutableStateOf("") }
@@ -185,7 +199,7 @@ fun LauncherScreen() {
         drawer = false; control = false; themeSheet = false
     }
 
-    Box(modifier = Modifier.fillMaxSize().pointerInputSwipe(
+    Box(modifier = Modifier.fillMaxSize().swipeUpDown(
         onUp = { if (control) control = false else drawer = true },
         onDown = { if (drawer) drawer = false else control = true }
     )) {
@@ -202,7 +216,7 @@ fun LauncherScreen() {
             Row(modifier = Modifier.fillMaxWidth().glass(30.dp).padding(12.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
                 apps.take(4).forEach { AppIcon(it, showLabel = false) }
             }
-            Text("Upar: Apps | Neeche: Control | ✨: Themes", color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp, modifier = Modifier.padding(top = 10.dp))
+            Text("Upar: Apps  |  Neeche: Control  |  \u2728: Themes", color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp, modifier = Modifier.padding(top = 10.dp))
         }
 
         AnimatedVisibility(visible = drawer,
@@ -234,7 +248,7 @@ fun LauncherScreen() {
         AnimatedVisibility(visible = themeSheet,
             enter = slideInVertically(tween(400)) { it } + fadeIn(tween(400)),
             exit = slideOutVertically(tween(300)) { it } + fadeOut(tween(300))) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)).clickable(enabled = false) {}) {
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f))) {
                 Column(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().glass(28.dp).padding(20.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Themes", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Medium)
@@ -247,9 +261,14 @@ fun LauncherScreen() {
                         }
                     }
                     if (themeTab == 0) {
-                        LazyVerticalGrid(columns = GridCells.Fixed(2), modifier = Modifier.size(0.dp)) {}
-                        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(columns = GridCells.Fixed(2), modifier = Modifier.height(260.dp)) {
-                            items(WALLPAPERS) { w ->
+                        LazyRow(modifier = Modifier.padding(bottom = 12.dp)) {
+                            items(listOf("Abstract", "Nature", "Anime")) { cat ->
+                                Text(cat, color = if (wallCat == cat) Color.White else Color.White.copy(0.5f), fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(end = 16.dp).clickable { wallCat = cat })
+                            }
+                        }
+                        LazyVerticalGrid(columns = GridCells.Fixed(2), modifier = Modifier.height(260.dp)) {
+                            items(WALLPAPERS.filter { it.category == wallCat }) { w ->
                                 Column(modifier = Modifier.padding(6.dp).clickable { applyWallpaper(ctx, w.colors); themeSheet = false }) {
                                     Box(modifier = Modifier.fillMaxWidth().size(120.dp).clip(RoundedCornerShape(16.dp)).background(Brush.verticalGradient(w.colors)))
                                     Text(w.name, color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
@@ -271,17 +290,3 @@ fun LauncherScreen() {
         }
     }
 }
-
-fun Modifier.pointerInputSwipe(onUp: () -> Unit, onDown: () -> Unit): Modifier = this.then(
-    Modifier.then(
-        androidx.compose.ui.input.pointer.pointerInput(Unit) {
-            var total = 0f
-            detectVerticalDragGestures(
-                onDragStart = { total = 0f },
-                onDragEnd = { if (total < -120f) onUp() else if (total > 120f) onDown() },
-                onDragCancel = {},
-                onVerticalDrag = { _, delta -> total += delta }
-            )
-        }
-    )
-)

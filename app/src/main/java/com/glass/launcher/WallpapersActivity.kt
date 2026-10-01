@@ -54,7 +54,7 @@ class WallpapersActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             setPadding(dp(16), 0, dp(16), dp(12))
         }
-        WallpaperCatalog.categories.forEach { cat ->
+        PhotoWallpapers.categories.forEach { cat ->
             val tv = TextView(this).apply {
                 text = cat
                 textSize = 14f
@@ -94,10 +94,10 @@ class WallpapersActivity : Activity() {
                 setStroke(dp(1), Color.parseColor("#2A3560"))
             }
         }
-        grid.adapter = WallAdapter(WallpaperCatalog.byCategory(cat))
+        grid.adapter = WallAdapter(PhotoWallpapers.byCategory(cat))
     }
 
-    private inner class WallAdapter(val items: List<WallpaperItem>) : BaseAdapter() {
+    private inner class WallAdapter(val items: List<PhotoWallpaper>) : BaseAdapter() {
         override fun getCount() = items.size
         override fun getItem(position: Int) = items[position]
         override fun getItemId(position: Int) = position.toLong()
@@ -147,7 +147,7 @@ class WallpapersActivity : Activity() {
         }
     }
 
-    private fun preview(item: WallpaperItem) {
+    private fun preview(item: PhotoWallpaper) {
         val dialog = Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
         val frame = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         frame.addView(ImageView(this).apply {
@@ -187,7 +187,7 @@ class WallpapersActivity : Activity() {
         dialog.show()
     }
 
-    private fun chooseTarget(item: WallpaperItem, dialog: Dialog) {
+    private fun chooseTarget(item: PhotoWallpaper, dialog: Dialog) {
         val options = arrayOf("Home screen", "Lock screen", "Both")
         val flags = intArrayOf(
             WallpaperManager.FLAG_SYSTEM,
@@ -200,7 +200,7 @@ class WallpapersActivity : Activity() {
                 Toast.makeText(this, "Applying...", Toast.LENGTH_SHORT).show()
                 Thread {
                     val msg = try {
-                        WallpaperCatalog.apply(this, item, flags[which]); "Wallpaper set"
+                        PhotoWallpapers.apply(this, item, flags[which]); "Wallpaper set"
                     } catch (e: Exception) {
                         "Failed: " + e.message
                     }
